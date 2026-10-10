@@ -1,0 +1,38 @@
+{
+  "name": "dsh-violet-boot",
+  "version": "0.3.0",
+  "description": "Violet Evergarden boot cinematic for the DeepSeek Harness Web UI — her portrait centred on a white page, developing out of a blur while your plugins load.",
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "boot",
+    "splash",
+    "animation",
+    "violet-evergarden"
+  ],
+  "license": "MIT",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./dsh": "./lib/index.js",
+    "./dsh/package.json": "./package.json",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "assets",
+    "screenshots",
+    "dsh.bundle.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./dsh.bundle.patch.yml"
+    }
+  }
+}

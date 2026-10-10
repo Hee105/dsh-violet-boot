@@ -1,0 +1,4 @@
+# 提交时统一成 LF，图片按二进制处理（Windows 上也不用怕换行符被改写）
+* text=auto eol=lf
+*.png binary
+*.jpg binary

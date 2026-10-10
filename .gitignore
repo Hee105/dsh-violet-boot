@@ -1,0 +1,6 @@
+# 这是插件包自己的仓库（push 到 GitHub 时根目录就是包根）
+node_modules/
+*.tgz
+*.zip
+.DS_Store
+Thumbs.db

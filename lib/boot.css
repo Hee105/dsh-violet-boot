@@ -1,0 +1,473 @@
+/* ==========================================================================
+   dsh-violet-boot — 薇尔莉特主题开机动画（样式层）
+   由 host 插件在 index.html 的 <head> 中注入，早于首帧渲染。
+   只依赖 DSH 稳定的两个数据属性（[data-dsh-boot] / [data-dsh-boot-spinner]），
+   不依赖任何被 hash 过的类名，因此 DSH 小版本升级不会失效。
+   主题照片由 lib/index.js 读成 base64 后替换掉下面的照片占位符（见 .ve-photo）。
+   注意：本文件里那个占位符字符串只能出现一次，否则会被替换多次、白白放大注入体积。
+
+   画面：纯白底、人物居中。背景只留极淡的暖色暗角、缓慢旋转的光柱、浮尘与飘散的信，
+   真实加载进度表现为画像下方那条细细的暖金光线，加载完成时右下角盖一枚火漆印。
+   ========================================================================== */
+
+/* --- 1. 屏蔽原生 boot 遮罩的外观，但保留它的 DOM 用于读取真实进度 --- */
+html:not(.ve-release) [data-dsh-boot] {
+  background: transparent !important;
+}
+html:not(.ve-release) [data-dsh-boot] > * {
+  visibility: hidden !important;
+}
+
+/* --- 2. 舞台根节点：一张白纸 --- */
+#ve-boot {
+  --ve-progress: 0;
+  --ve-gold: #c9a45c;
+  --ve-gold-soft: rgba(201, 164, 92, 0.55);
+  --ve-ink: #2b2318;
+  --ve-ink-soft: rgba(70, 58, 38, 0.62);
+  position: fixed;
+  inset: 0;
+  z-index: 2147483000;
+  overflow: hidden;
+  /* 独立组：画像的 multiply 只跟这层白底相乘，页面外的东西不会漏进来 */
+  isolation: isolate;
+  display: grid;
+  place-items: center;
+  font-family: "Iowan Old Style", "Palatino Linotype", Palatino, Georgia,
+    "Songti SC", "Noto Serif CJK SC", "Microsoft YaHei", serif;
+  color: var(--ve-ink);
+  background: #ffffff;
+  opacity: 0;
+  /* 0.3s 渐显 */
+  transition: opacity 300ms ease;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  user-select: none;
+  -webkit-user-select: none;
+  cursor: default;
+}
+#ve-boot.ve-in {
+  opacity: 1;
+}
+#ve-boot.ve-out {
+  opacity: 0;
+  transition: opacity 620ms cubic-bezier(0.45, 0, 0.85, 1);
+  pointer-events: none;
+}
+
+/* --- 3. 背景层：暖色暗角 / 光柱 / 浮尘 / 飘散的信 ---
+   全部画在画像之下、且都很淡：白纸上只该看见人物。 */
+.ve-vig {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(
+    122% 100% at 50% 44%,
+    rgba(255, 255, 255, 0) 44%,
+    rgba(178, 158, 112, 0.07) 100%
+  );
+  pointer-events: none;
+}
+.ve-rays {
+  position: absolute;
+  inset: -45%;
+  background: repeating-conic-gradient(
+    from 0deg at 50% 50%,
+    rgba(190, 166, 110, 0.03) 0deg,
+    rgba(190, 166, 110, 0.03) 2.6deg,
+    transparent 9deg,
+    transparent 17deg,
+    rgba(150, 172, 206, 0.018) 19.5deg,
+    rgba(150, 172, 206, 0.018) 21deg,
+    transparent 27deg,
+    transparent 40deg
+  );
+  /* 中心留白：光柱不要汇聚成一个亮点。 */
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.1) 0%, #000 34%, #000 100%);
+  mask-image: radial-gradient(circle at 50% 50%, rgba(0, 0, 0, 0.1) 0%, #000 34%, #000 100%);
+  /* 白底上“光”是加不出来的，所以改用 multiply 让光柱成为极淡的阴影 */
+  mix-blend-mode: multiply;
+  animation: ve-spin 190s linear infinite;
+  pointer-events: none;
+}
+.ve-motes,
+.ve-letters {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.ve-mote {
+  position: absolute;
+  left: var(--x);
+  top: var(--y);
+  width: var(--s);
+  height: var(--s);
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(198, 168, 106, 0.6), rgba(198, 168, 106, 0) 70%);
+  opacity: 0;
+  animation: ve-mote var(--dur) ease-in-out var(--delay) infinite;
+}
+.ve-letter {
+  position: absolute;
+  left: var(--x);
+  bottom: -6%;
+  width: 18px;
+  height: 12px;
+  border: 1px solid rgba(186, 158, 102, 0.42);
+  border-radius: 2px;
+  opacity: 0;
+  animation: ve-letter var(--dur) linear var(--delay) infinite;
+}
+.ve-letter::before,
+.ve-letter::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 1px;
+  background: rgba(186, 158, 102, 0.38);
+  transform-origin: 0 0;
+}
+.ve-letter::before {
+  transform: rotate(33deg);
+  width: 62%;
+}
+.ve-letter::after {
+  left: auto;
+  right: 0;
+  transform-origin: 100% 0;
+  transform: rotate(-33deg);
+  width: 62%;
+}
+
+/* --- 4. 舞台 ---
+   刻意不给 z-index：一旦它成为层叠上下文，画像的 multiply 就只能跟组内空白相乘，
+   白底会重新变成一块可见的方块。靠 DOM 顺序压住背景层就够了。 */
+.ve-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+/* 人物身后的柔光。白底上加不了光，所以用一层极淡的暖色做“被灯照着”的感觉 */
+.ve-bloom {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: min(820px, 92vw);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(
+    circle,
+    rgba(226, 196, 132, 0.15) 0%,
+    rgba(222, 196, 148, 0.055) 42%,
+    rgba(226, 196, 132, 0) 70%
+  );
+  mix-blend-mode: multiply;
+  filter: blur(6px);
+  pointer-events: none;
+}
+
+/* --- 5. 人像：唯一的画面主体，居中、不裁切 --- */
+.ve-portrait {
+  position: relative;
+  height: min(58vh, 560px);
+  /* 与素材 739x760 同比：contain 之下不裁切、不拉伸 */
+  aspect-ratio: 739 / 760;
+  overflow: hidden;
+}
+.ve-photo {
+  position: absolute;
+  inset: 0;
+  background-image: url("__VE_PORTRAIT_SRC__");
+  /* 略放大一点，好让 ve-drift 有左右巡游的余地；多出来的边全是白底，看不见 */
+  background-size: auto 104%;
+  background-position: 50% 46%;
+  background-repeat: no-repeat;
+  /* multiply：照片底色已被拉到纯白，混合结果就等于白纸本身——
+     于是画面上只有人，没有那块照片的方形白底。
+     注意：这个元素与白底之间不能有带 transform / filter / opacity 的祖先，
+     那种祖先会自成隔离组，multiply 就只跟组内的空白相乘，方块会重新露出来。 */
+  mix-blend-mode: multiply;
+  opacity: 0;
+  transform: scale(1.045);
+  filter: blur(12px) sepia(0.1) saturate(0.98) contrast(1.01);
+  transition: opacity 900ms ease, transform 1600ms cubic-bezier(0.2, 0.7, 0.2, 1),
+    filter 1400ms ease;
+  /* 极缓的呼吸：静止的画像也在“活着”，但看不出在动 */
+  animation: ve-drift 18s ease-in-out infinite alternate;
+}
+#ve-boot.ve-in .ve-photo {
+  opacity: 1;
+  transform: scale(1);
+  filter: blur(0px) sepia(0.06) saturate(1.04) contrast(1.02);
+}
+
+/* --- 6. 书写区（默认为空：wordmark / subtitle 留空时这两个节点根本不渲染） --- */
+.ve-typedrow {
+  display: flex;
+  align-items: flex-end;
+  min-height: 42px;
+  margin-top: 26px;
+  font-size: clamp(21px, 3vw, 31px);
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  color: var(--ve-ink);
+  transition: transform 90ms ease;
+}
+/* 每敲下一个字，整行轻轻一顿——替代原来打字机键帽的触感 */
+.ve-typedrow.ve-strike {
+  transform: translateY(1.3px);
+}
+.ve-typed {
+  white-space: pre;
+}
+.ve-caret {
+  display: inline-block;
+  width: 2px;
+  height: 1.05em;
+  margin-left: 3px;
+  background: #3a2c14;
+  animation: ve-blink 1.02s steps(1, end) infinite;
+}
+
+/* --- 7. 桌面光线 = 真实加载进度 --- */
+.ve-desk {
+  position: relative;
+  width: min(560px, 66vw);
+  height: 1px;
+  margin-top: 34px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(120, 101, 60, 0.16) 10%,
+    rgba(120, 101, 60, 0.16) 90%,
+    transparent
+  );
+}
+.ve-deskfill {
+  position: absolute;
+  inset: 0;
+  transform-origin: left center;
+  transform: scaleX(var(--ve-progress));
+  background: linear-gradient(90deg, rgba(214, 178, 110, 0.55), var(--ve-gold) 55%, #b98f3e);
+  box-shadow: 0 0 12px rgba(201, 164, 92, 0.5);
+}
+.ve-deskhead {
+  position: absolute;
+  top: 50%;
+  left: calc(var(--ve-progress) * 100%);
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 50%;
+  background: #b98f3e;
+  box-shadow: 0 0 10px 3px rgba(201, 164, 92, 0.55);
+  opacity: clamp(0, calc(var(--ve-progress) * 12), 1);
+}
+
+/* --- 8. 文案 --- */
+.ve-caption {
+  margin-top: 22px;
+  font-size: clamp(11px, 1.2vw, 14px);
+  letter-spacing: 0.32em;
+  color: var(--ve-ink-soft);
+}
+.ve-hintline {
+  margin-top: 12px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-family: ui-sans-serif, system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  color: rgba(96, 86, 70, 0.6);
+}
+.ve-pct {
+  font-variant-numeric: tabular-nums;
+  color: rgba(160, 118, 42, 0.9);
+  min-width: 3.2em;
+  text-align: right;
+}
+
+/* --- 9. 火漆印：加载完成时盖在右下角（不打扰居中的人物） --- */
+.ve-seal {
+  position: absolute;
+  right: 40px;
+  bottom: 34px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 36% 27%, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0) 27%),
+    radial-gradient(circle at 34% 30%, #d7664f, #a5352a 62%, #7d2419 100%);
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.3) inset,
+    0 0 0 2px rgba(140, 44, 32, 0.2),
+    0 3px 10px rgba(90, 60, 40, 0.22);
+  opacity: 0;
+  transform: scale(0.4) rotate(-14deg);
+  transition: opacity 260ms ease, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.ve-seal::before {
+  /* 压制边缘的锯齿压痕 */
+  content: "";
+  position: absolute;
+  inset: 2.5px;
+  border-radius: 50%;
+  border: 2px dotted rgba(255, 220, 198, 0.34);
+}
+.ve-seal::after {
+  content: "";
+  position: absolute;
+  inset: 10px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 232, 214, 0.6);
+}
+#ve-boot.ve-sealed .ve-seal {
+  opacity: 1;
+  transform: scale(1) rotate(-6deg);
+}
+
+/* --- 10. 收尾光扫 --- */
+.ve-sweep {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    100deg,
+    transparent 34%,
+    rgba(226, 190, 120, 0.16) 44%,
+    rgba(255, 250, 232, 0.9) 50%,
+    rgba(226, 190, 120, 0.16) 56%,
+    transparent 66%
+  );
+}
+#ve-boot.ve-out .ve-sweep {
+  opacity: 1;
+  animation: ve-sweep 700ms cubic-bezier(0.2, 0.7, 0.2, 1) forwards;
+}
+
+/* --- 11. 关键帧 --- */
+@keyframes ve-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ve-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+@keyframes ve-mote {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 12px, 0) scale(0.7);
+  }
+  30% {
+    opacity: 0.55;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx), -86px, 0) scale(1.1);
+  }
+}
+@keyframes ve-letter {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 0, 0) rotate(var(--rot));
+  }
+  12% {
+    opacity: 0.42;
+  }
+  88% {
+    opacity: 0.28;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(var(--dx), calc(-102vh), 0) rotate(calc(var(--rot) + 26deg));
+  }
+}
+@keyframes ve-sweep {
+  0% {
+    transform: translate3d(-120%, 0, 0);
+  }
+  100% {
+    transform: translate3d(120%, 0, 0);
+  }
+}
+/* 极缓的呼吸：换 background-position 而不是 transform——transform 会让元素
+   自成隔离组，multiply 就会失效（见 .ve-photo 的注释）。 */
+@keyframes ve-drift {
+  from {
+    background-position: 50% 43%;
+  }
+  to {
+    background-position: 50% 49%;
+  }
+}
+
+/* --- 12. 自适应与降级 ---
+   注意：这里一律不去 transform 祖先（缩放画像尺寸就够了），
+   否则会破坏画像的 multiply。 */
+@media (max-height: 680px) {
+  .ve-portrait {
+    height: min(52vh, 420px);
+  }
+  .ve-desk {
+    margin-top: 22px;
+  }
+  .ve-caption {
+    margin-top: 14px;
+  }
+}
+@media (max-height: 560px) {
+  .ve-portrait {
+    height: min(48vh, 320px);
+  }
+}
+@media (max-width: 520px) {
+  .ve-portrait {
+    height: min(50vh, 380px);
+  }
+  .ve-typedrow {
+    font-size: clamp(19px, 6.4vw, 27px);
+  }
+  .ve-desk {
+    width: 88vw;
+  }
+  .ve-seal {
+    right: 20px;
+    bottom: 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ve-rays,
+  .ve-mote,
+  .ve-letter,
+  .ve-caret,
+  .ve-photo {
+    animation: none !important;
+  }
+  .ve-mote,
+  .ve-letter {
+    opacity: 0.24;
+  }
+  /* 保留“显影”这一步，但去掉模糊与缩放，只留一次快速淡入 */
+  .ve-photo,
+  #ve-boot.ve-in .ve-photo {
+    filter: none !important;
+    transform: none !important;
+    transition: opacity 400ms ease !important;
+  }
+  #ve-boot.ve-out .ve-sweep {
+    animation: none;
+    opacity: 0;
+  }
+}
