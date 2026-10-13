@@ -28,6 +28,8 @@
 想要旧版的「打字机敲出 HARNESS」画面，把 `wordmark` / `subtitle` 配上文案即可
 （见下节配置表），或用仓库里的 `dsh-violet-boot-0.1.0.zip`。
 想要 v0.2.0 那张「画像印在奶油色信笺上」的画面，用 `dsh-violet-boot-0.2.0.zip`。
+只想要白底居中、不要界面背景图，用 `dsh-violet-boot-0.3.0.zip`；
+**当前版本 0.4.0** 在此基础上加了下面这层使用界面背景图（`wallpaper: false` 可单独关掉）。
 
 画像的浅色底用的是 `mix-blend-mode: multiply`：照片底色已被预处理拉成纯白，
 混合之后就等于背景色本身，因此看不出图片的方框。
