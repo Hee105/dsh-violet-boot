@@ -1,0 +1,94 @@
+/* ==========================================================================
+   dsh-violet-boot — 薇尔莉特主题界面背景（样式层）
+
+   把画像铺在**使用界面**最底层，再把页面画布调淡，让画像淡淡透出来。
+
+   为什么只碰变量、不碰类名：
+   DSH 前端是压缩构建，容器类名都带 hash（实测活页面里是 `.pI_x6G_frame`、
+   `.wSkVaW_root`、`._emptyTabHost_6nhg2_143` 这种），换个小版本就会变。
+   所以这里只动 DSH **主题系统自己的语义变量**（`--dsw-alias-*`），
+   那是它对外承诺的接口。
+
+   只有一个绘制层：
+   body / 主框架 / 空标签页 / 侧栏都各自画了一层不透明底色，如果都调成半透明，
+   透明度会层层相乘（0.9³ ≈ 0.73），背景根本透不出来，而且层数一变效果就变。
+   所以反过来做：**把画像连同柔光罩直接画在 body 上**，再把
+   `--dsw-alias-bg-base` 设成完全透明，让里层不再覆盖。
+   这样全页只有一个绘制层，透明度完全可控。
+   菜单 / 弹窗用的 `--dsw-alias-bg-layer-2/3` 保持原样，读文字的地方不透明。
+
+   注入时由 lib/index.js 替换下面的占位符。
+   ========================================================================== */
+
+/* --- 1. 画布透明：画像直接画在 body 上，html 别再叠一层 ---
+   用 html body 而不是 body：注入的 <style> 在 <head> 开头，DSH 的样式表
+   <link> 排在后面，靠 !important 才压得住（DSH 那几条没加 !important）。 */
+html,
+html body {
+  background-color: transparent !important;
+}
+
+/* --- 2. 可调参数集中声明成自定义属性 ---
+   一是让下面几条规则读起来像配置而不是天书，二是调试时可以往 body 上写
+   inline style（记得带 important）就能实时改，不必重新生成页面。 */
+html body {
+  --ve-canvas: var(--dsw-static-neutral-bluish-00, #ffffff);
+  --ve-scrim: __VE_SCRIM__%;
+  --ve-scrim-dark: __VE_SCRIM_DARK__%;
+  --ve-sidebar: __VE_SIDEBAR__%;
+  --ve-size: __VE_WALL_SIZE__;
+  --ve-position: __VE_WALL_POSITION__;
+  /* 柔光罩是**横向渐变**而不是一整片：文字都排在左边，画像偏在右边，
+     所以左侧盖得实（正文清爽）、右侧留得薄（画像看得见）。
+     一整片的话，要么字被画像的肩发糊住，要么画像淡到等于没有。 */
+  --ve-scrim-left: min(100%, calc(var(--ve-scrim) + __VE_SCRIM_FALLOFF__%));
+}
+
+/* --- 3. 柔光罩 + 画像 ---
+   浓度 100% 时画像完全看不见，0% 时全露，所以「降低可见度」就是把它调大。 */
+html body {
+  background-image: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--ve-canvas) var(--ve-scrim-left), transparent) 0%,
+      color-mix(in srgb, var(--ve-canvas) var(--ve-scrim-left), transparent) 30%,
+      color-mix(in srgb, var(--ve-canvas) var(--ve-scrim), transparent) 100%
+    ),
+    url("__VE_WALLPAPER_SRC__") !important;
+  background-size: auto, var(--ve-size) !important;
+  background-position: 0 0, var(--ve-position) !important;
+  background-repeat: repeat, no-repeat !important;
+  background-attachment: fixed, fixed !important;
+}
+
+/* --- 4. 让里层别再盖住画像 ---
+   --dsw-alias-bg-base 用在 body / 主框架 / 空标签页 / 文档预览 / 横幅上，
+   全设成透明，画像才露得出来。
+   侧栏（--dsw-alias-bg-layer-1）保留一点点底色，好让面板边界还看得见。 */
+html body {
+  --dsw-alias-bg-base: transparent !important;
+  --dsw-alias-bg-layer-1: color-mix(in srgb, var(--ve-canvas) var(--ve-sidebar), transparent) !important;
+}
+
+/* --- 5. 深色主题：同一张白底水彩，在近黑画布上会像一块发光斑，
+   所以柔光罩换成深色、并且盖得更实一点（用 --ve-scrim-dark）。
+   这里只要改 --ve-canvas 与 --ve-scrim，第 3 条规则会自己重算。 */
+html body[data-ds-dark-theme] {
+  --ve-canvas: var(--dsw-static-neutral-bluish-950, #101114);
+  --ve-scrim: var(--ve-scrim-dark);
+}
+
+/* --- 6. 窄屏：画像居中的脸容易被侧栏压掉，把可见区域往右挪 --- */
+@media (max-width: 900px) {
+  html body {
+    --ve-position: __VE_WALL_POSITION_NARROW__;
+  }
+}
+
+/* --- 7. 关闭开关 ---
+   wallpaper=false 时 lib/index.js 不会注入本文件，这里只是让「开着但想临时关」
+   的调试路径也有个明确出口。 */
+html.ve-no-wallpaper body {
+  background-image: none !important;
+  --dsw-alias-bg-base: var(--ve-canvas) !important;
+  --dsw-alias-bg-layer-1: var(--ve-canvas) !important;
+}
